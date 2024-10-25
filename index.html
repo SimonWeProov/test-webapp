@@ -119,15 +119,6 @@
                     throw new Error('No cameras found');
                 }
 
-                cameraInfoElement.innerHTML = `
-                    <h3>Available Cameras:</h3>
-                    <ul>
-                        ${availableCameras.map(camera => 
-                            `<li>${camera.label || 'Unnamed Camera'}</li>`
-                        ).join('')}
-                    </ul>
-                `;
-
                 if (availableCameras.length === 1) {
                     return availableCameras[0].deviceId;
                 }
@@ -160,6 +151,16 @@
                 );
 
                 const validDevices = deviceCapabilities.filter(device => device !== null);
+
+                cameraInfoElement.innerHTML = `
+                    <h3>Available Cameras:</h3>
+                    <ul>
+                        ${availableCameras.map(camera => 
+						`<li>${camera.label || 'Unnamed Camera'} - Zoom: ${camera.capabilities.zoom.min} to {camera.capabilities.zoom.max}</li>`
+                        ).join('')}
+                    </ul>
+                `;
+
                 
                 const devicesWithZoom = validDevices.filter(
                     device => device.capabilities && device.capabilities.zoom
