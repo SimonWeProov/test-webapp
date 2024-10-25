@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wide Camera Selector</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f0f0f0;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        #camera {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #000;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #007AFF;
+            color: white;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+        }
+
+        #camera-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Wide Camera Selector</h1>
+        <div class="camera-container">
+            <video id="camera" autoplay playsinline></video>
+        </div>
+        <div class="button-container">
+            <button id="startButton">Start Camera</button>
+            <button id="switchButton" disabled>Switch Camera</button>
+        </div>
+        <div id="status">Camera not started</div>
+        <div id="camera-info"></div>
+    </div>
+
+    <script>
+        let currentStream = null;
+        let availableCameras = [];
+
+        const startButton = document.getElementById('startButton');
+        const switchButton = document.getElementById('switchButton');
+        const statusElement = document.getElementById('status');
+        const cameraInfoElement = document.getElementById('camera-info');
+        const videoElement = document.getElementById('camera');
+
+        async function getWidestCamera() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableCameras = devices.filter(device => device.kind === 'videoinput');
+                
+                if (availableCameras.length === 0) {
+                    throw new Error('No cameras found');
+                }
+
+                cameraInfoElement.innerHTML = `
+                    <h3>Available Cameras:</h3>
+                    <ul>
+                        ${availableCameras.map(camera => 
+                            `<li>${camera.label || 'Unnamed Camera'}</li>`
+                        ).join('')}
+                    </ul>
+                `;
+
+                if (availableCameras.length === 1) {
+                    return availableCameras[0].deviceId;
+                }
+
+                const deviceCapabilities = await Promise.all(
+                    availableCameras.map(async device => {
+                        try {
+                            const stream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                    deviceId: { exact: device.deviceId },
+                                    facingMode: 'environment'
+                                }
+                            });
+                            
+                            const track = stream.getVideoTracks()[0];
+                            const capabilities = track.getCapabilities();
+                            
+                            stream.getTracks().forEach(track => track.stop());
+                            
+                            return {
+                                deviceId: device.deviceId,
+                                label: device.label,
+                                capabilities
+                            };
+                        } catch (err) {
+                            console.warn(`Could not get capabilities for device ${device.label}:`, err);
+                            return null;
+                        }
+                    })
+                );
+
+                const validDevices = deviceCapabilities.filter(device => device !== null);
+                
+                const devicesWithZoom = validDevices.filter(
+                    device => device.capabilities && device.capabilities.zoom
+                );
+
+                if (devicesWithZoom.length > 0) {
+                    devicesWithZoom.sort((a, b) => 
+                        a.capabilities.zoom.min - b.capabilities.zoom.min
+                    );
+                    return devicesWithZoom[0].deviceId;
+                }
+
+                const wideCamera = validDevices.find(device => 
+                    device.label.toLowerCase().includes('wide')
+                );
+                
+                if (wideCamera) {
+                    return wideCamera.deviceId;
+                }
+
+                return availableCameras[0].deviceId;
+            } catch (err) {
+                console.error('Error selecting camera:', err);
+                throw err;
+            }
+        }
+
+        async function startCamera() {
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const widestCameraId = await getWidestCamera();
+                
+                currentStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        deviceId: { exact: widestCameraId },
+                        facingMode: 'environment',
+                    }
+                });
+
+                videoElement.srcObject = currentStream;
+                
+                const track = currentStream.getVideoTracks()[0];
+                statusElement.textContent = `Active camera: ${track.label}`;
+                
+                startButton.textContent = 'Restart Camera';
+                switchButton.disabled = availableCameras.length <= 1;
+                
+                return currentStream;
+            } catch (err) {
+                console.error('Error starting camera:', err);
+                statusElement.textContent = `Error: ${err.message}`;
+                throw err;
+            }
+        }
+
+        async function switchCamera() {
+            if (!currentStream) return;
+
+            const currentTrack = currentStream.getVideoTracks()[0];
+            const currentDeviceId = currentTrack.getSettings().deviceId;
+            
+            const nextCamera = availableCameras.find(camera => 
+                camera.deviceId !== currentDeviceId
+            );
+
+            if (nextCamera) {
+                try {
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            deviceId: { exact: nextCamera.deviceId },
+                            facingMode: 'environment',
+                        }
+                    });
+
+                    videoElement.srcObject = currentStream;
+                    const track = currentStream.getVideoTracks()[0];
+                    statusElement.textContent = `Active camera: ${track.label}`;
+                } catch (err) {
+                    console.error('Error switching camera:', err);
+                    statusElement.textContent = `Error switching camera: ${err.message}`;
+                }
+            }
+        }
+
+        startButton.addEventListener('click', () => {
+            startCamera().catch(err => {
+                console.error('Failed to start camera:', err);
+                statusElement.textContent = `Failed to start camera: ${err.message}`;
+            });
+        });
+
+        switchButton.addEventListener('click', switchCamera);
+
+        // Request permissions on page load
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                stream.getTracks().forEach(track => track.stop());
+                startButton.disabled = false;
+                statusElement.textContent = 'Camera ready. Click "Start Camera" to begin.';
+            })
+            .catch(err => {
+                console.error('Permission error:', err);
+                statusElement.textContent = 'Camera permission denied';
+                startButton.disabled = true;
+            });
+    </script>
+</body>
+</html>
