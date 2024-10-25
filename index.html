@@ -156,7 +156,7 @@
                     <h3>Available Cameras:</h3>
                     <ul>
                         ${deviceCapabilities.map(camera => 
-						`<li>${camera.label || 'Unnamed Camera'} - Zoom: ${camera.capabilities.zoom.min} to ${camera.capabilities.zoom.max}</li>`
+						`<li>${camera.label || 'Unnamed Camera'} - <br> ${JSON.stringify(camera.capabilities)} <br></li>`
                         ).join('')}
                     </ul>
                 `;
