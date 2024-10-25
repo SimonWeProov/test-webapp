@@ -155,8 +155,8 @@
                 cameraInfoElement.innerHTML = `
                     <h3>Available Cameras:</h3>
                     <ul>
-                        ${availableCameras.map(camera => 
-						`<li>${camera.label || 'Unnamed Camera'} - Zoom: ${camera.capabilities.zoom.min} to {camera.capabilities.zoom.max}</li>`
+                        ${deviceCapabilities.map(camera => 
+						`<li>${camera.label || 'Unnamed Camera'} - Zoom: ${camera.capabilities.zoom}</li>`
                         ).join('')}
                     </ul>
                 `;
